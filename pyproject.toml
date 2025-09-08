@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Temporal"
+version = "0.1.0"
+description = "Time-Contrastive Pretraining for In-Context Image and Video Segmentation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Assefa S. Wahd", email = "wahd@ualberta.ca"}
+]
+dependencies = [
+    "torch>=2.5.0",
+    "torchvision>=0.20.1",
+    "numpy>=1.24.4",
+    "tqdm>=4.66.1",
+    "hydra-core>=1.3.2",
+    "iopath>=0.1.10",
+    "pillow>=9.4.0",
+    "wandb",
+    "opencv-python>=4.5.0",
+    "gradio>=4.44.1",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/aswahd/Temporal"
+
+[tool.setuptools]
+packages = ["temporal"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black>=21.0", 
+    "isort",
+    "flake8>=3.9",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[project.scripts]
+ti = "temporal.app.app_image:main"
+tv = "temporal.app.app_video:main"
+

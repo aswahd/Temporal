@@ -1,0 +1,53 @@
+sam2_model:
+  sam2_checkpoint: null                # path to *.ckpt / *.pth
+  sam2_cfg: null                       # path to the SAM-2 model cfg (yaml / json)
+  apply_postprocessing: false          # fill holes etc.
+  use_vos_optimized_video_predictor: false   # fused CUDA kernels
+
+prompt_retriever:
+  sampling_strategy: topk              # topk | diverse
+  pool_multiplier: 5                   # candidate pool size multiplier (diverse)
+  lambda_param: 0.5                    # diversity weight
+  context_size: 20
+  num_keyframes: 20
+  temporal_distance: 4
+  confidence_threshold: 0.7
+  temporal:
+    _target_: temporal.models.utils.embedding_fns.prepare_temporal
+    checkpoint_path: null
+  dinov2:
+    _target_: temporal.models.utils.embedding_fns.prepare_dinov2
+    model_key: "dinov2_vitb14"
+  clip:
+    _target_: temporal.models.utils.embedding_fns.prepare_clip
+  embedding_fn: ${prompt_retriever.dinov2}
+
+
+predictor:
+  _target_: temporal.models.temporal.build_sam.build_sam2_video_predictor
+  config_file:         ${sam2_model.sam2_cfg}
+  ckpt_path:           ${sam2_model.sam2_checkpoint}
+  apply_postprocessing: ${sam2_model.apply_postprocessing}
+  vos_optimized:       ${sam2_model.use_vos_optimized_video_predictor}
+  ignore_empty_mask_prompts: True
+
+
+segmenter:
+  _target_: temporal.app.app_image.Segmenter
+  _partial_: true
+  predictor:      ${predictor}
+  context_size:    ${prompt_retriever.context_size}
+  sampling_strategy: ${prompt_retriever.sampling_strategy}
+  pool_multiplier: ${prompt_retriever.pool_multiplier}
+  lambda_param:    ${prompt_retriever.lambda_param}
+
+dataset:
+  _partial_: true
+  # _target_: temporal.utils.dataset.MultiMaskDataset # If masks are split into their own respective directories
+  #ignore_missing_masks: false  # Whether to raise an error if an image doesn't have a corresponding mask or skip it
+  _target_: temporal.utils.dataset.SingleMaskDataset
+  root_dir: /path/to/Train
+
+runtime:
+  share: true # gradio share public link
+
