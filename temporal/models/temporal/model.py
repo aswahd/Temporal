@@ -1,12 +1,13 @@
 import torch
 import torch.distributed
 import torch.nn.functional as F
+from torch.nn.init import trunc_normal_
+
 from temporal.models import Model as BaseModel
 from temporal.models.sam2.modeling.sam2_utils import (
     get_1d_sine_pe,
     select_closest_cond_frames,
 )
-from torch.nn.init import trunc_normal_
 
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
@@ -117,16 +118,12 @@ class Model(BaseModel):
         # Part 3: memory encoder for the previous frame's outputs
         self.memory_encoder = memory_encoder
         self.mem_dim = self.hidden_dim
-        if hasattr(self.memory_encoder, "out_proj") and hasattr(
-            self.memory_encoder.out_proj, "weight"
-        ):
+        if hasattr(self.memory_encoder, "out_proj") and hasattr(self.memory_encoder.out_proj, "weight"):
             # if there is compression of memories along channel dim
             self.mem_dim = self.memory_encoder.out_proj.weight.shape[0]
         self.num_maskmem = num_maskmem  # Number of memories accessible
         # Temporal encoding of the memories
-        self.maskmem_tpos_enc = torch.nn.Parameter(
-            torch.zeros(num_maskmem, 1, 1, self.mem_dim)
-        )
+        self.maskmem_tpos_enc = torch.nn.Parameter(torch.zeros(num_maskmem, 1, 1, self.mem_dim))
         trunc_normal_(self.maskmem_tpos_enc, std=0.02)
         # a single token to indicate no memory embedding from previous frames
         self.no_mem_embed = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
@@ -180,9 +177,7 @@ class Model(BaseModel):
         # Model compilation
         if compile_image_encoder:
             # Compile the forward function (not the full module) to allow loading checkpoints.
-            print(
-                "Image encoder compilation is enabled. First forward pass will be slow."
-            )
+            print("Image encoder compilation is enabled. First forward pass will be slow.")
             self.image_encoder.forward = torch.compile(
                 self.image_encoder.forward,
                 mode="max-autotune",
@@ -223,9 +218,7 @@ class Model(BaseModel):
         masks = batch.get("masks", None)
         assert inference or masks is not None, "Masks must be provided during training."
         backbone_out = self.forward_image(image)
-        backbone_out, vision_feats, vision_pos_embeds, feat_sizes = (
-            self._prepare_backbone_features(backbone_out)
-        )
+        backbone_out, vision_feats, vision_pos_embeds, feat_sizes = self._prepare_backbone_features(backbone_out)
 
         # Add no_mem_embed, which is added to the lowest rest feat. map during training on videos
         if self.directly_add_no_mem_embed:
@@ -254,17 +247,13 @@ class Model(BaseModel):
             high_res_features[i] = feat.repeat_interleave(num_classes, dim=0)
 
         if inference:  # Use predicted prompts only
-            sparse_embeddings, dense_embeddings, interim_mask_output, pred_boxes = (
-                self.prompt_sampler.prompt_learner(
-                    image_features=high_res_features + [image_embedding],
-                    queries=learnable_prompts,
-                )
+            sparse_embeddings, dense_embeddings, interim_mask_output, pred_boxes = self.prompt_sampler.prompt_learner(
+                image_features=high_res_features + [image_embedding],
+                queries=learnable_prompts,
             )
 
             # Upsample to original image size
-            interim_mask_output = F.interpolate(
-                interim_mask_output, scale_factor=4, mode="bilinear"
-            )
+            interim_mask_output = F.interpolate(interim_mask_output, scale_factor=4, mode="bilinear")
 
         else:  # Use both predicted and manual prompts
             prompt_outputs = self.prompt_sampler(
@@ -279,21 +268,17 @@ class Model(BaseModel):
             dense_embeddings = prompt_outputs["dense_embeddings"]
 
             if interim_mask_output is not None:
-                interim_mask_output = F.interpolate(
-                    interim_mask_output, scale_factor=4, mode="bilinear"
-                )
+                interim_mask_output = F.interpolate(interim_mask_output, scale_factor=4, mode="bilinear")
 
         # Predict mask
-        low_res_masks, iou_predictions, sam_tokens_out, object_score_logits = (
-            self.sam_mask_decoder(
-                image_embeddings=image_embedding,  # (B, 256, H//16, W//16)
-                image_pe=image_pe,  # (1, 256, H//16, W//16)
-                sparse_prompt_embeddings=sparse_embeddings,  # (B, N, 256)
-                dense_prompt_embeddings=dense_embeddings,  # (B, 256, H//16, W//16)
-                multimask_output=False,
-                repeat_image=sparse_embeddings.size(0) != image_embedding.size(0),
-                high_res_features=high_res_features,
-            )
+        low_res_masks, iou_predictions, sam_tokens_out, object_score_logits = self.sam_mask_decoder(
+            image_embeddings=image_embedding,  # (B, 256, H//16, W//16)
+            image_pe=image_pe,  # (1, 256, H//16, W//16)
+            sparse_prompt_embeddings=sparse_embeddings,  # (B, N, 256)
+            dense_prompt_embeddings=dense_embeddings,  # (B, 256, H//16, W//16)
+            multimask_output=False,
+            repeat_image=sparse_embeddings.size(0) != image_embedding.size(0),
+            high_res_features=high_res_features,
         )  # (B, 1, 256, 256)
 
         # Upscale the masks to the original image resolution
@@ -499,9 +484,7 @@ class Model(BaseModel):
         ious = mask_inputs.new_ones(mask_inputs.size(0), 1).float()
         if not self.use_obj_ptrs_in_encoder:
             # all zeros as a dummy object pointer (of shape [B, C])
-            obj_ptr = torch.zeros(
-                mask_inputs.size(0), self.hidden_dim, device=mask_inputs.device
-            )
+            obj_ptr = torch.zeros(mask_inputs.size(0), self.hidden_dim, device=mask_inputs.device)
         else:
             # produce an object pointer using the SAM decoder from the mask input
             _, _, _, _, _, obj_ptr, _ = self._forward_sam_heads(
@@ -537,12 +520,8 @@ class Model(BaseModel):
         if self.use_high_res_features_in_sam:
             # precompute projected level 0 and level 1 features in SAM decoder
             # to avoid running it again on every SAM click
-            backbone_out["backbone_fpn"][0] = self.sam_mask_decoder.net.conv_s0(
-                backbone_out["backbone_fpn"][0]
-            )
-            backbone_out["backbone_fpn"][1] = self.sam_mask_decoder.net.conv_s1(
-                backbone_out["backbone_fpn"][1]
-            )
+            backbone_out["backbone_fpn"][0] = self.sam_mask_decoder.net.conv_s0(backbone_out["backbone_fpn"][0])
+            backbone_out["backbone_fpn"][1] = self.sam_mask_decoder.net.conv_s1(backbone_out["backbone_fpn"][1])
         return backbone_out
 
     def _prepare_backbone_features(self, backbone_out):
@@ -644,9 +623,7 @@ class Model(BaseModel):
                 maskmem_enc = prev["maskmem_pos_enc"][-1].cuda()
                 maskmem_enc = maskmem_enc.flatten(2).permute(2, 0, 1)
                 # Temporal positional encoding
-                maskmem_enc = (
-                    maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
-                )
+                maskmem_enc = maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
                 to_cat_memory_pos_embed.append(maskmem_enc)
 
             # Construct the list of past object pointers
@@ -672,9 +649,7 @@ class Model(BaseModel):
                     t = frame_idx + t_diff if track_in_reverse else frame_idx - t_diff
                     if t < 0 or (num_frames is not None and t >= num_frames):
                         break
-                    out = output_dict["non_cond_frame_outputs"].get(
-                        t, unselected_cond_outputs.get(t, None)
-                    )
+                    out = output_dict["non_cond_frame_outputs"].get(t, unselected_cond_outputs.get(t, None))
                     if out is not None:
                         pos_and_ptrs.append((t_diff, out["obj_ptr"]))
                 # If we have at least one object pointer, add them to the across attention
@@ -695,9 +670,7 @@ class Model(BaseModel):
                         obj_pos = obj_ptrs.new_zeros(len(pos_list), B, self.mem_dim)
                     if self.mem_dim < C:
                         # split a pointer into (C // self.mem_dim) tokens for self.mem_dim < C
-                        obj_ptrs = obj_ptrs.reshape(
-                            -1, B, C // self.mem_dim, self.mem_dim
-                        )
+                        obj_ptrs = obj_ptrs.reshape(-1, B, C // self.mem_dim, self.mem_dim)
                         obj_ptrs = obj_ptrs.permute(0, 2, 1, 3).flatten(0, 1)
                         obj_pos = obj_pos.repeat_interleave(C // self.mem_dim, dim=0)
                     to_cat_memory.append(obj_ptrs)
@@ -749,9 +722,7 @@ class Model(BaseModel):
             # optionally, apply non-overlapping constraints to the masks (it's applied
             # in the batch dimension and should only be used during eval, where all
             # the objects come from the same video under batch size 1).
-            pred_masks_high_res = self._apply_non_overlapping_constraints(
-                pred_masks_high_res
-            )
+            pred_masks_high_res = self._apply_non_overlapping_constraints(pred_masks_high_res)
         # scale the raw mask logits with a temperature before applying sigmoid
         binarize = self.binarize_mask_from_pts_for_mem_enc and is_mask_from_pts
         if binarize and not self.training:
@@ -809,9 +780,7 @@ class Model(BaseModel):
             # (see it as a GT mask) without using a SAM prompt encoder + mask decoder.
             pix_feat = current_vision_feats[-1].permute(1, 2, 0)
             pix_feat = pix_feat.view(-1, self.hidden_dim, *feat_sizes[-1])
-            sam_outputs = self._use_mask_as_output(
-                pix_feat, high_res_features, mask_inputs
-            )
+            sam_outputs = self._use_mask_as_output(pix_feat, high_res_features, mask_inputs)
         else:
             # fused the visual feature with previous memory features in the memory bank
             pix_feat_with_mem = self._prepare_memory_conditioned_features(
