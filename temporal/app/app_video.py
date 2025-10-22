@@ -79,7 +79,7 @@ class Segmenter:
                 selected.append(idx)
         return sorted(selected)
 
-    def inference_vos(self, frames: List[np.ndarray]) -> Dict[int, np.ndarray]:
+    def inference_vos(self, frames: List[np.ndarray]) -> Dict[int, Dict[int, torch.Tensor]]:
         # TODO: This can be improved by avoiding writing to disk
         with tempfile.TemporaryDirectory() as tmpdir:
             frame_paths = [f"{tmpdir}/frame_{i:04d}.png" for i in range(len(frames))]
@@ -103,7 +103,7 @@ class Segmenter:
 
         return video_segments  # {frame_idx: {category_id: mask, ...}, ...}
 
-    def inference_image(self, query_path: str) -> Tuple[Dict[int, torch.Tensor], List[str], List[str]]:
+    def inference_image(self, query_path: str) -> Dict[int, torch.Tensor]:
         """Process single image (original functionality)"""
         context_indices = select_context(
             query_image_path=query_path,

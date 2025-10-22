@@ -1,6 +1,6 @@
 sam2_model:
-  sam2_checkpoint: checkpoints/sam2.1_hiera_base_plus.pt
-  sam2_cfg: configs/sam2.1/sam2.1_hiera_b+.yaml
+  sam2_checkpoint: null                # path to *.ckpt / *.pth
+  sam2_cfg: null                       # path to the SAM-2 model cfg (yaml / json)
   apply_postprocessing: false          # fill holes etc.
   use_vos_optimized_video_predictor: false   # fused CUDA kernels
 
@@ -8,7 +8,7 @@ prompt_retriever:
   sampling_strategy: topk              # topk | diverse
   pool_multiplier: 5                   # candidate pool size multiplier (diverse)
   lambda_param: 0.5                    # diversity weight
-  context_size: 10
+  context_size: 20
   num_keyframes: 20
   temporal_distance: 4
   confidence_threshold: 0.7
@@ -23,39 +23,38 @@ prompt_retriever:
   embedding_fn: ${prompt_retriever.dinov2}
 
 
-embedding_fn:
-  embedding_fn: ${prompt_retriever.dinov2}
-
-
 predictor:
   _target_: temporal.models.temporal.build_sam.build_sam2_video_predictor
   config_file:         ${sam2_model.sam2_cfg}
   ckpt_path:           ${sam2_model.sam2_checkpoint}
   apply_postprocessing: ${sam2_model.apply_postprocessing}
   vos_optimized:       ${sam2_model.use_vos_optimized_video_predictor}
+  ignore_empty_mask_prompts: True
 
 
-segmenter:
-  _target_: temporal.app.app_video.Segmenter
+evaluator:
+  _target_: temporal.eval.eval_image.ImageEvaluator
   _partial_: true
   predictor:      ${predictor}
   context_size:    ${prompt_retriever.context_size}
-  num_keyframes:   ${prompt_retriever.num_keyframes}
-  temporal_distance: ${prompt_retriever.temporal_distance}
-  confidence_threshold: ${prompt_retriever.confidence_threshold}
   sampling_strategy: ${prompt_retriever.sampling_strategy}
   pool_multiplier: ${prompt_retriever.pool_multiplier}
   lambda_param:    ${prompt_retriever.lambda_param}
 
-dataset:
+train_dataset:
   _partial_: true
-  # _target_: temporal.utils.dataset.MultiMaskDataset
-  #ignore_missing_masks: false 
+  # _target_: temporal.utils.dataset.MultiMaskDataset # If masks are split into their own respective directories
+  #ignore_missing_masks: false  # Whether to raise an error if an image doesn't have a corresponding mask or skip it
   _target_: temporal.utils.dataset.SingleMaskDataset
   root_dir: /home/wahd/Projects/HIP/data/Train
 
+test_dataset:
+  _partial_: true
+  # _target_: temporal.utils.dataset.MultiMaskDataset # If masks are split into their own respective directories
+  #ignore_missing_masks: false  # Whether to raise an error if an image doesn't have a corresponding mask or skip it
+  _target_: temporal.utils.dataset.SingleMaskDataset
+  root_dir: /home/wahd/Projects/HIP/data/Test
 
-runtime:
-  share: false
+logs: logs/hip results.log # path to save logs
 
 

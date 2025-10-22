@@ -9,7 +9,7 @@ prompt_retriever:
   pool_multiplier: 5                   # candidate pool size multiplier (diverse)
   lambda_param: 0.5                    # diversity weight
   context_size: 10
-  num_keyframes: 20
+  num_keyframes: 10
   temporal_distance: 4
   confidence_threshold: 0.7
   temporal:
@@ -35,8 +35,8 @@ predictor:
   vos_optimized:       ${sam2_model.use_vos_optimized_video_predictor}
 
 
-segmenter:
-  _target_: temporal.app.app_video.Segmenter
+evaluator:
+  _target_: temporal.eval.eval_video.VideoEvaluator
   _partial_: true
   predictor:      ${predictor}
   context_size:    ${prompt_retriever.context_size}
@@ -47,15 +47,18 @@ segmenter:
   pool_multiplier: ${prompt_retriever.pool_multiplier}
   lambda_param:    ${prompt_retriever.lambda_param}
 
-dataset:
+train_dataset:
   _partial_: true
   # _target_: temporal.utils.dataset.MultiMaskDataset
   #ignore_missing_masks: false 
   _target_: temporal.utils.dataset.SingleMaskDataset
   root_dir: /home/wahd/Projects/HIP/data/Train
 
+test_dataset:
+  _partial_: true
+  # _target_: temporal.utils.dataset.MultiMaskDataset
+  #ignore_missing_masks: false 
+  _target_: temporal.utils.dataset.VideoDataset
+  video_dir: /home/wahd/datasets/HipICLDataset
 
-runtime:
-  share: false
-
-
+logs: logs/hip video results.log # path to save logs

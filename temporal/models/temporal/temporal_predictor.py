@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -16,7 +17,7 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
         super().__init__(*args, **kwargs)
         self.ignore_empty_mask_prompts = ignore_empty_mask_prompts
 
-    def set_predictor_state(self, image_paths: List[str]) -> Dict:
+    def set_predictor_state(self, image_paths: List[str | Path]) -> Dict:
         """
         target_size: Tuple[int, int]: the size of the query image. All context images will be resized to this size.
         """
@@ -28,7 +29,7 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
         self,
         inference_state: dict,
         masks_context: Dict[int, torch.Tensor],
-        category_ids: Tuple[int, ...] = (1, 2, 3),
+        category_ids: Tuple[int, ...],
     ):
         """
         Prompts the video prediction models with context masks provided as arrays.
@@ -47,7 +48,9 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
 
         is_init_cond_frame = [True] * len(category_ids)
         for frame_idx, masks_frame in enumerate(masks_context):
-            assert len(masks_frame) == len(category_ids), "Number of categories must match category IDs"
+            assert sorted(list(masks_frame.keys())) == sorted(category_ids), (
+                "Categories IDs in masks_context do not match category_ids."
+            )
 
             for cat_id in category_ids:
                 mask_prompt = masks_frame[cat_id]
@@ -58,7 +61,7 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
                 # But depening on your dataset, you may want to remove this check.
 
                 if self.ignore_empty_mask_prompts and not mask_prompt.sum() > 0:
-                    print(f"Empty mask for category {category_id} in frame {frame_idx}")
+                    print(f"Empty mask for category {cat_id} in frame {frame_idx}")
                     continue
 
                 self.add_new_mask(
@@ -68,7 +71,7 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
                     mask=mask_prompt,
                     is_init_cond_frame=is_init_cond_frame[category_ids.index(cat_id)],
                 )
-                # print(f"Added mask for category {category_id} in frame {frame_idx}")
+                print(f"Added mask for category {cat_id} in frame {frame_idx}")
 
                 # All future frames with mask input for the same object are treated as non-init conditioning frames (memory from other frames is used)
                 is_init_cond_frame[category_ids.index(cat_id)] = False
@@ -153,7 +156,7 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
         start_frame_idx=None,
         max_frame_num_to_track=None,
         reverse=False,
-    ) -> Dict[int, Dict[int, np.ndarray]]:
+    ) -> Dict[int, Dict[int, torch.Tensor]]:
         """
         Propagate segmentation through video frames.
 
@@ -253,10 +256,10 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
 
     def forward_in_context(
         self,
-        image_query: str,
-        images_context: List[str],
+        image_query: str | Path,
+        images_context: List[str | Path],
         masks_context: Dict[int, torch.Tensor],
-        category_ids: Tuple[int],
+        category_ids: Tuple[int, ...],
     ):
         inference_state = self.set_predictor_state(image_paths=images_context + [image_query])
 
@@ -371,7 +374,9 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
                 # We skip frames that already have outputs consolidated from prompting
                 if frame_idx in obj_output_dict["cond_frame_outputs"]:
                     # if frame_idx in obj_output_dict["cond_frame_outputs"]:
-                    print(f"Skipping frame {frame_idx} for object {obj_idx}")
+                    # print(
+                    #     f"Skipping prediction for prompted frame {frame_idx} for object {self._obj_idx_to_id(inference_state, obj_idx)}"
+                    # )
                     storage_key = "cond_frame_outputs"
                     current_out = obj_output_dict[storage_key][frame_idx]
                     device = inference_state["device"]
@@ -439,7 +444,7 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
                 # We skip frames that already have outputs consolidated from prompting
                 if frame_idx not in keyframe_indices and frame_idx in obj_output_dict["cond_frame_outputs"]:
                     # if frame_idx in obj_output_dict["cond_frame_outputs"]:
-                    print(f"Skipping frame {frame_idx} for object {obj_idx}")
+                    print(f"Skipping frame {frame_idx} for object {self._obj_idx_to_id(inference_state, obj_idx)}")
                     storage_key = "cond_frame_outputs"
                     current_out = obj_output_dict[storage_key][frame_idx]
                     device = inference_state["device"]
@@ -478,3 +483,6 @@ class TemporalVideoPredictor(SAM2VideoPredictor):
 
 class SAM2VideoPredictorVOS(TemporalVideoPredictor, SAM2VideoPredictorVOS):
     """Optimized for the VOS setting"""
+
+
+TemporalImagePredictor = TemporalVideoPredictor

@@ -207,10 +207,10 @@ class SingleMaskDataset(ImageDataset):
             img = self.transform(img)
 
         return {
+            "img_path": img_path,
             "image": img,
             "img_size": (h, w),
             "masks": masks,
-            "img_path": img_path,
         }
 
     def _get_category_ids(self, mask_path: Path) -> List[int]:
@@ -233,8 +233,8 @@ class SingleMaskDataset(ImageDataset):
     def get_category_names(self) -> List[str]:
         return [k for k in self.category_map]
 
-    def get_category_ids(self) -> List[int]:
-        return [i for _, i in self.category_map.items()]
+    def get_category_ids(self) -> Tuple[int, ...]:
+        return tuple(v for v in self.category_map.values())
 
     def get_category_id_to_name(self) -> Dict[int, str]:
         return {v: k for k, v in self.category_map.items()}
@@ -250,7 +250,7 @@ class SingleMaskDataset(ImageDataset):
 
         return category_counts
 
-    def get_image_paths(self, idx=None):
+    def get_image_paths(self, idx=None) -> str | List[str]:
         if idx is None:
             return self.images
 
@@ -336,7 +336,7 @@ class MultiMaskDataset(torch.utils.data.Dataset):
         return [k for k in self.category_map]
 
     def get_category_ids(self) -> Tuple[int, ...]:
-        return [i for _, i in self.category_map.items()]
+        return tuple(v for v in self.category_map.values())
 
     def get_category_id_to_name(self):
         return {v: k for k, v in self.category_map.items()}
